@@ -61,7 +61,8 @@ const CONNECTED_RELAYS_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const ANNOUNCE_INTERVAL: Duration = Duration::from_secs(600);
 const ANNOUNCE_INITIAL_DELAY: Duration = Duration::from_secs(60);
 const CHANNEL_BUF_SIZE: usize = 1024 * 8;
-const DEFAULT_NETID: u16 = 6133;
+/// DigiByte DEX network. KDF enables floodsub forwarding and PEERS gossip on any other netid.
+pub const DEFAULT_NETID: u16 = 2014;
 
 /// Used in time validation logic for each peer which runs immediately  after the
 /// `ConnectionEstablished` event.

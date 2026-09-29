@@ -487,3 +487,22 @@ pub fn peer_id_from_secp_public(secp_public: &[u8]) -> Result<PeerId, MmError<De
     let public_key = Libp2pSecpPublic::try_from_bytes(secp_public)?;
     Ok(PeerId::from_public_key(&Libp2pPublic::from(public_key)))
 }
+
+#[cfg(test)]
+mod dgb_netid_tests {
+    use super::*;
+    use mm2_libp2p::behaviours::atomicdex::{DEFAULT_NETID, DEPRECATED_NETID_LIST};
+
+    #[test]
+    fn dgb_default_netid_is_2014_and_not_deprecated() {
+        assert_eq!(DEFAULT_NETID, 2014);
+        assert!(!DEPRECATED_NETID_LIST.contains(&DEFAULT_NETID));
+    }
+
+    #[test]
+    fn dgb_netid_ports() {
+        let ports = lp_network_ports(2014).unwrap();
+        assert_eq!(ports.tcp, 15847);
+        assert_eq!(ports.wss, 15857);
+    }
+}

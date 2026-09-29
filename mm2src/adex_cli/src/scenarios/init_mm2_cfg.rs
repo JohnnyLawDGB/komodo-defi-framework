@@ -14,7 +14,7 @@ use super::inquire_extentions::{InquireOption, DEFAULT_DEFAULT_OPTION_BOOL_FORMA
 use crate::helpers;
 use crate::logging::error_anyhow;
 
-const DEFAULT_NET_ID: u16 = 6133;
+const DEFAULT_NET_ID: u16 = 2014;
 const DEFAULT_GID: &str = "adex-cli";
 const DEFAULT_OPTION_PLACEHOLDER: &str = "Tap enter to skip";
 const RPC_PORT_MIN: u16 = 1024;
@@ -128,7 +128,7 @@ impl Mm2Cfg {
     fn inquire_net_id(&mut self) -> Result<()> {
         self.netid = CustomType::<u16>::new("What is the network `mm2` is going to be a part, netid:")
                 .with_default(DEFAULT_NET_ID)
-                .with_help_message(r#"Network ID number, telling the Komodo DeFi Framework which network to join. 6133 is the current main network, though alternative netids can be used for testing or "private" trades"#)
+                .with_help_message(r#"Network ID number, telling the Komodo DeFi Framework which network to join. 2014 is the DigiByte DEX network, though alternative netids can be used for testing or "private" trades"#)
                 .with_placeholder(format!("{DEFAULT_NET_ID}").as_str())
                 .prompt()
                 .map_err(|error|
