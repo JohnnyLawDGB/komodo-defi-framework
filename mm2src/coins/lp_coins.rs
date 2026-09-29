@@ -4108,18 +4108,19 @@ impl DexFee {
         DexFee::Standard(dex_fee)
     }
 
-    /// Returns DEX fee rate. GLEEC trades get a 50% discount (1% vs 2% base rate).
+    /// Returns DEX fee rate. Pairs that include DGB (any `DGB` or `DGB-*` ticker) get 1%; others pay 2%.
     pub fn dex_fee_rate(base: &str, rel: &str) -> MmNumber {
         #[cfg(any(feature = "for-tests", test))]
         let fee_discount_tickers: &[&str] = match std::env::var("MYCOIN_FEE_DISCOUNT") {
-            Ok(_) => &["GLEEC", "MYCOIN"],
-            Err(_) => &["GLEEC"],
+            Ok(_) => &["DGB", "MYCOIN"],
+            Err(_) => &["DGB"],
         };
         #[cfg(not(any(feature = "for-tests", test)))]
-        let fee_discount_tickers: &[&str] = &["GLEEC"];
+        let fee_discount_tickers: &[&str] = &["DGB"];
 
-        if fee_discount_tickers.contains(&base) || fee_discount_tickers.contains(&rel) {
-            // 1% fee (50% discount)
+        let root = |ticker: &str| ticker.split('-').next().unwrap_or(ticker).to_owned();
+        if fee_discount_tickers.contains(&root(base).as_str()) || fee_discount_tickers.contains(&root(rel).as_str()) {
+            // 1% fee (DigiByte pairs)
             BigRational::new(1.into(), 100.into()).into()
         } else {
             // 2% fee (standard rate)
@@ -6592,23 +6593,42 @@ mod tests {
         let actual_fee = DexFee::new_from_taker_coin(&btc, rel, &amount);
         assert_eq!(DexFee::Standard("0.01".into()), actual_fee);
 
-        // GLEEC discount test: 1% fee instead of 2%
-        let gleec = TestCoin::new("GLEEC");
+        // DGB discount test: 1% fee instead of 2%
+        let dgb = TestCoin::new("DGB");
         TestCoin::min_tx_amount.mock_safe(|_| MockResult::Return(MmNumber::from("0.00001").into()));
         let rel = "BTC";
         let amount: MmNumber = 1.into();
-        let actual_fee = DexFee::new_from_taker_coin(&gleec, rel, &amount);
+        let actual_fee = DexFee::new_from_taker_coin(&dgb, rel, &amount);
         assert_eq!(DexFee::Standard("0.01".into()), actual_fee);
 
-        // GLEEC as maker_ticker also gets discount
+        // DGB as maker_ticker also gets discount
         let btc = TestCoin::new("BTC");
         TestCoin::min_tx_amount.mock_safe(|_| MockResult::Return(MmNumber::from("0.00001").into()));
-        let rel = "GLEEC";
+        let rel = "DGB";
         let amount: MmNumber = 1.into();
         let actual_fee = DexFee::new_from_taker_coin(&btc, rel, &amount);
         assert_eq!(DexFee::Standard("0.01".into()), actual_fee);
 
         TestCoin::min_tx_amount.clear_mock();
+    }
+
+    #[test]
+    fn dgb_pairs_pay_one_percent() {
+        assert_eq!(DexFee::dex_fee_rate("DGB", "LTC"), MmNumber::from("0.01"));
+        assert_eq!(DexFee::dex_fee_rate("LTC", "DGB"), MmNumber::from("0.01"));
+    }
+
+    #[test]
+    fn dgb_segwit_gets_discount() {
+        assert_eq!(DexFee::dex_fee_rate("DGB-segwit", "LTC"), MmNumber::from("0.01"));
+        assert_eq!(DexFee::dex_fee_rate("LTC-segwit", "DGB-segwit"), MmNumber::from("0.01"));
+    }
+
+    #[test]
+    fn non_dgb_pairs_pay_two_percent() {
+        assert_eq!(DexFee::dex_fee_rate("BTC", "LTC"), MmNumber::from("0.02"));
+        assert_eq!(DexFee::dex_fee_rate("GLEEC", "BTC"), MmNumber::from("0.02"));
+        assert_eq!(DexFee::dex_fee_rate("DGBX", "LTC"), MmNumber::from("0.02"));
     }
 }
 

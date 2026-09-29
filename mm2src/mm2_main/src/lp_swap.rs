@@ -2381,16 +2381,16 @@ mod lp_swap_tests {
         assert_eq!(kmd_burn_amount, expected_burn);
     }
 
-    /// Tests that GLEEC trades get a 50% fee discount (1% vs 2% standard rate)
+    /// Tests that DGB trades get a 50% fee discount (1% vs 2% standard rate)
     /// and that the 75/25 fee/burn split is applied on the discounted amount.
     #[test]
     fn test_dex_fee_burn_split_with_discount_and_standard_coins() {
-        let gleec = coins::TestCoin::new("GLEEC");
+        let dgb = coins::TestCoin::new("DGB");
         TestCoin::should_burn_dex_fee.mock_safe(|_| MockResult::Return(true));
         let trade_amount = MmNumber::from(6150);
-        let (gleec_fee_amount, gleec_burn_amount) = match DexFee::new_from_taker_coin(&gleec, "ETH", &trade_amount) {
+        let (dgb_fee_amount, dgb_burn_amount) = match DexFee::new_from_taker_coin(&dgb, "ETH", &trade_amount) {
             DexFee::Standard(_) | DexFee::NoFee => {
-                panic!("Wrong variant returned for GLEEC from `DexFee::new_from_taker_coin`.")
+                panic!("Wrong variant returned for DGB from `DexFee::new_from_taker_coin`.")
             },
             DexFee::WithBurn {
                 fee_amount,
@@ -2400,12 +2400,12 @@ mod lp_swap_tests {
         };
         TestCoin::should_burn_dex_fee.clear_mock();
 
-        // GLEEC should use 1% rate (50% discount)
-        let total_gleec_fee = &gleec_fee_amount + &gleec_burn_amount;
+        // DGB should use 1% rate (50% discount)
+        let total_dgb_fee = &dgb_fee_amount + &dgb_burn_amount;
         let expected_total = &trade_amount * &MmNumber::from("0.01"); // 1%
-        assert_eq!(total_gleec_fee, expected_total);
+        assert_eq!(total_dgb_fee, expected_total);
 
-        // Non-GLEEC should use 2% rate
+        // Non-DGB should use 2% rate
         let rick = coins::TestCoin::new("RICK");
         TestCoin::should_burn_dex_fee.mock_safe(|_| MockResult::Return(true));
         let (rick_fee_amount, rick_burn_amount) = match DexFee::new_from_taker_coin(&rick, "ETH", &trade_amount) {
@@ -2424,14 +2424,14 @@ mod lp_swap_tests {
         let expected_total = &trade_amount * &MmNumber::from("0.02"); // 2%
         assert_eq!(total_rick_fee, expected_total);
 
-        // Verify GLEEC fee is half of standard fee
-        assert_eq!(&total_gleec_fee * &MmNumber::from(2), total_rick_fee);
+        // Verify DGB fee is half of standard fee
+        assert_eq!(&total_dgb_fee * &MmNumber::from(2), total_rick_fee);
 
         // Verify fee/burn split: 75% fee, 25% burn
-        let expected_fee = &total_gleec_fee * &MmNumber::from("0.75");
-        let expected_burn = &total_gleec_fee * &MmNumber::from("0.25");
-        assert_eq!(gleec_fee_amount, expected_fee);
-        assert_eq!(gleec_burn_amount, expected_burn);
+        let expected_fee = &total_dgb_fee * &MmNumber::from("0.75");
+        let expected_burn = &total_dgb_fee * &MmNumber::from("0.25");
+        assert_eq!(dgb_fee_amount, expected_fee);
+        assert_eq!(dgb_burn_amount, expected_burn);
     }
 
     #[test]
