@@ -12,14 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install pinned Rust toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install --profile minimal
+      - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
       - name: Install build deps
         uses: ./.github/actions/deps-install
         with:
           deps: ('protoc')
       - run: |
-          cargo test -p coins --lib dex_fee
+          # skipped test queries a live ETH node (network-dependent)
+          cargo test -p coins --lib dex_fee -- --skip validate_dex_fee_eth_confirmed_before_min_block
           cargo test -p coins --lib dgb_
           cargo test -p coins --lib non_dgb_pairs
           cargo test -p mm2_p2p -p mm2_main -p chain --lib dex_fee
@@ -31,8 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install pinned Rust toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install --profile minimal
+      - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
       - name: Install build deps
         uses: ./.github/actions/deps-install
         with:
@@ -51,9 +52,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install pinned Rust toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install --profile minimal
-      - run: rustup target add aarch64-apple-ios
+      - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
+      - run: rustup target add --toolchain 1.94.0 aarch64-apple-ios
       - name: Install build deps
         uses: ./.github/actions/deps-install
         with:
@@ -92,9 +93,9 @@ jobs:
           echo "/bin" >> $GITHUB_PATH
           echo "/usr/bin" >> $GITHUB_PATH
           echo "/root/.cargo/bin" >> $GITHUB_PATH
-      - name: Install pinned Rust toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install --profile minimal
-      - run: rustup target add ${{ matrix.target }}
+      - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
+      - run: rustup target add --toolchain 1.94.0 ${{ matrix.target }}
       - name: Install build deps
         uses: ./.github/actions/deps-install
         with:
