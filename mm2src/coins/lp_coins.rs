@@ -6630,6 +6630,15 @@ mod tests {
         assert_eq!(DexFee::dex_fee_rate("GLEEC", "BTC"), MmNumber::from("0.02"));
         assert_eq!(DexFee::dex_fee_rate("DGBX", "LTC"), MmNumber::from("0.02"));
     }
+
+    #[test]
+    fn dgb_dex_fee_pubkey_matches_owner_fee_address() {
+        use bitcrypto::dhash160;
+        // hash160 of the DigiByte-controlled fee key (owner input FEE_HASH160).
+        const DGB_FEE_HASH160: &str = "5e6bb7240aecd5138d3b5922b57233b3b491873c";
+        assert_eq!(hex::encode(dhash160(&DEX_FEE_ADDR_RAW_PUBKEY).as_slice()), DGB_FEE_HASH160);
+        assert_eq!(*DEX_FEE_ADDR_RAW_PUBKEY, *DEX_BURN_ADDR_RAW_PUBKEY);
+    }
 }
 
 #[cfg(all(feature = "for-tests", not(target_arch = "wasm32")))]

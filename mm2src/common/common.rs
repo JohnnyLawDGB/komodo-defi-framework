@@ -220,10 +220,11 @@ pub const APPLICATION_GRPC_WEB_TEXT_PROTO: &str = "application/grpc-web-text+pro
 pub const SATOSHIS: u64 = 100_000_000;
 
 /// Dex fee public key for chains where SECP256K1 is supported
-pub const DEX_FEE_ADDR_PUBKEY: &str = "03a778d9bd346fa704cf3e2508cd074d93a1bbc1e504fbecbb0a8d48e7cccbbf5c";
+/// DigiByte DEX fee key (owner-controlled; private key held offline).
+pub const DEX_FEE_ADDR_PUBKEY: &str = "036f27a4e83ddf1239d545887d7dadd5aad8ab0a45518ff2c9fd2721e2d40da52a";
 /// Public key to collect the burn part of dex fee, for chains where SECP256K1 is supported
 /// Burn currently disabled - using same address as fee address in case there is a bug that enables burn (can be re-enabled later)
-pub const DEX_BURN_ADDR_PUBKEY: &str = "03a778d9bd346fa704cf3e2508cd074d93a1bbc1e504fbecbb0a8d48e7cccbbf5c";
+pub const DEX_BURN_ADDR_PUBKEY: &str = "036f27a4e83ddf1239d545887d7dadd5aad8ab0a45518ff2c9fd2721e2d40da52a";
 
 // TODO: Update ED25519 pubkey for Sia when GUI support is added
 pub const DEX_FEE_PUBKEY_ED25519: &str = "77b0936728f63257b074c7b3fb2c4fad98df345f57de1ec418fc42619e4e29f8";
