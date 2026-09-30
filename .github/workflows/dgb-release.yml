@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
       - name: Install build deps
@@ -21,30 +21,33 @@ jobs:
           deps: ('protoc')
       - run: |
           # skipped test queries a live ETH node (network-dependent)
-          cargo test -p coins --lib dex_fee -- --skip validate_dex_fee_eth_confirmed_before_min_block
-          cargo test -p coins --lib dgb_
-          cargo test -p coins --lib non_dgb_pairs
-          cargo test -p mm2_p2p -p mm2_main -p chain --lib dex_fee
-          cargo test -p mm2_p2p -p mm2_main -p chain --lib dgb_netid
-          cargo test -p mm2_p2p -p mm2_main -p chain --lib max_taker_vol_from_available
+          cargo test -p coins --lib dex_fee --locked -- --skip validate_dex_fee_eth_confirmed_before_min_block
+          # dgb_validate_fee_* need a live MARTY electrum (cipig); retry once on network flakiness
+          cargo test -p coins --lib dgb_ --locked || { echo "retrying once (network-dependent tests)"; sleep 30; cargo test -p coins --lib dgb_ --locked; }
+          cargo test -p coins --lib non_dgb_pairs --locked
+          cargo test -p mm2_p2p -p mm2_main -p chain --lib dex_fee --locked
+          cargo test -p mm2_p2p -p mm2_main -p chain --lib dgb_netid --locked
+          cargo test -p mm2_p2p -p mm2_main -p chain --lib max_taker_vol_from_available --locked
+          cargo test -p mm2_p2p -p mm2_main -p chain --lib dial_guard --locked
+          cargo test -p mm2_p2p -p mm2_main -p chain --lib dgb_pick_bootstrap --locked
 
   linux-x86-64:
     timeout-minutes: 60
     needs: fee-tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
       - name: Install build deps
         uses: ./.github/actions/deps-install
         with:
           deps: ('protoc')
-      - run: cargo build --release
+      - run: cargo build --release --locked
       - run: |
           TAG=$(git rev-parse --short=7 HEAD)
           zip -j kdf_${TAG}-linux-x86-64.zip target/release/kdf
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-x86-64
           path: 'kdf_*.zip'
@@ -54,7 +57,7 @@ jobs:
     needs: fee-tests
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Install pinned Rust toolchain (matches rust-toolchain.toml)
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
       - run: rustup target add --toolchain 1.94.0 aarch64-apple-ios
@@ -62,12 +65,12 @@ jobs:
         uses: ./.github/actions/deps-install
         with:
           deps: ('protoc')
-      - run: cargo rustc --target aarch64-apple-ios --lib --release --package mm2_bin_lib --crate-type=staticlib
+      - run: cargo rustc --locked --target aarch64-apple-ios --lib --release --package mm2_bin_lib --crate-type=staticlib
       - run: |
           TAG=$(git rev-parse --short=7 HEAD)
           mv target/aarch64-apple-ios/release/libkdflib.a target/aarch64-apple-ios/release/libkdf.a
           zip -j kdf_${TAG}-ios-aarch64.zip target/aarch64-apple-ios/release/libkdf.a
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-aarch64
           path: 'kdf_*.zip'
@@ -76,7 +79,7 @@ jobs:
     timeout-minutes: 90
     needs: fee-tests
     runs-on: ubuntu-latest
-    container: komodoofficial/ci-container:latest
+    container: komodoofficial/ci-container@sha256:12c3051c751b99c5c6cad08e1c4ab9298be213e1f9d58c6b8c18e21ef9d6a8e4
     strategy:
       matrix:
         include:
@@ -91,7 +94,7 @@ jobs:
             linker_var: CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER
             clang: armv7a-linux-androideabi21-clang
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: |
           echo "/bin" >> $GITHUB_PATH
@@ -109,12 +112,12 @@ jobs:
           export PATH=$PATH:/android-ndk/bin
           export ${{ matrix.cc_var }}=${{ matrix.clang }}
           export ${{ matrix.linker_var }}=${{ matrix.clang }}
-          cargo rustc --target=${{ matrix.target }} --lib --release --crate-type=staticlib --package mm2_bin_lib
+          cargo rustc --locked --target=${{ matrix.target }} --lib --release --crate-type=staticlib --package mm2_bin_lib
       - run: |
           TAG=$(git rev-parse --short=7 HEAD)
           mv target/${{ matrix.target }}/release/libkdflib.a target/${{ matrix.target }}/release/libkdf.a
           zip -j kdf_${TAG}-android-${{ matrix.arch }}.zip target/${{ matrix.target }}/release/libkdf.a
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-${{ matrix.arch }}
           path: 'kdf_*.zip'
@@ -127,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/dgb-v')
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
