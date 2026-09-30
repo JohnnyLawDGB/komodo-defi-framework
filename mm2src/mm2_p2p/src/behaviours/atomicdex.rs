@@ -211,6 +211,15 @@ fn check_and_mark_dialed(recently_dialed_peers: &mut MutexGuard<TimedMap<Multiad
     true
 }
 
+/// Forgets every recorded dial attempt.
+///
+/// `RECENTLY_DIALED_PEERS` is process-global, but its entries belong to one swarm. When a host
+/// stops KDF and starts it again in the same process (the Flutter SDK does this on sign-in), the new
+/// swarm must be able to dial its seed nodes immediately instead of waiting `DIAL_RETRY_DELAY`.
+pub fn reset_recently_dialed_peers() {
+    *RECENTLY_DIALED_PEERS.lock().unwrap() = TimedMap::new_with_map_kind(MapKind::FxHashMap);
+}
+
 /// Returns info about directly connected peers.
 pub async fn get_directly_connected_peers(mut cmd_tx: AdexCmdTx) -> HashMap<String, Vec<String>> {
     let (result_tx, rx) = oneshot::channel();
@@ -804,6 +813,8 @@ fn start_gossipsub(
         _ => (),
     }
 
+    // A new swarm starts with a clean dial history (see `reset_recently_dialed_peers`).
+    reset_recently_dialed_peers();
     let mut recently_dialed_peers = RECENTLY_DIALED_PEERS.lock().unwrap();
     for relay in bootstrap.choose_multiple(&mut rng, mesh_n) {
         if !check_and_mark_dialed(&mut recently_dialed_peers, relay) {
@@ -1278,4 +1289,23 @@ pub async fn spawn_gossipsub(
     // `Libp2p` must be spawned on the tokio runtime
     runtime_c.spawn(fut);
     result_rx.await.expect("Fatal error on starting gossipsub")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dial_guard_resets_on_restart() {
+        // Unique non-memory address: RECENTLY_DIALED_PEERS is process-global and shared with the in-memory swarm tests.
+        let addr: Multiaddr = "/ip4/192.0.2.77/tcp/7777".parse().unwrap();
+        {
+            let mut guard = RECENTLY_DIALED_PEERS.lock().unwrap();
+            assert!(check_and_mark_dialed(&mut guard, &addr));
+            assert!(!check_and_mark_dialed(&mut guard, &addr), "second dial within DIAL_RETRY_DELAY must be suppressed");
+        }
+        reset_recently_dialed_peers();
+        let mut guard = RECENTLY_DIALED_PEERS.lock().unwrap();
+        assert!(check_and_mark_dialed(&mut guard, &addr), "a fresh P2P start must be allowed to dial again");
+    }
 }
