@@ -211,6 +211,27 @@ fn check_and_mark_dialed(recently_dialed_peers: &mut MutexGuard<TimedMap<Multiad
     true
 }
 
+/// Chooses up to `n` bootstrap addresses to dial and marks only those as dialed.
+///
+/// Candidates that are connected or were dialed within `DIAL_RETRY_DELAY` are skipped.
+fn pick_bootstrap_to_dial(
+    candidates: &[Multiaddr],
+    n: usize,
+    is_connected: impl Fn(&Multiaddr) -> bool,
+    guard: &mut MutexGuard<TimedMap<Multiaddr, ()>>,
+    rng: &mut impl rand::Rng,
+) -> Vec<Multiaddr> {
+    let eligible: Vec<&Multiaddr> = candidates
+        .iter()
+        .filter(|addr| !is_connected(addr) && guard.get(*addr).is_none())
+        .collect();
+    let chosen: Vec<Multiaddr> = eligible.choose_multiple(rng, n).map(|a| (*a).clone()).collect();
+    for addr in &chosen {
+        check_and_mark_dialed(guard, addr);
+    }
+    chosen
+}
+
 /// Forgets every recorded dial attempt.
 ///
 /// `RECENTLY_DIALED_PEERS` is process-global, but its entries belong to one swarm. When a host
@@ -955,16 +976,18 @@ fn maintain_connection_to_relays(swarm: &mut AtomicDexSwarm, bootstrap_addresses
         // choose some random bootstrap addresses to connect if peers exchange returned not enough peers
         if to_connect.len() < to_connect_num {
             let connect_bootstrap_num = to_connect_num - to_connect.len();
-            for addr in bootstrap_addresses
-                .iter()
-                .filter(|addr| {
-                    !swarm.behaviour().core.gossipsub.is_connected_to_addr(addr)
-                        && check_and_mark_dialed(&mut recently_dialed_peers, addr)
-                })
-                .collect::<Vec<_>>()
-                .choose_multiple(&mut rng, connect_bootstrap_num)
-            {
-                if let Err(e) = libp2p::Swarm::dial(swarm, (*addr).clone()) {
+            let chosen = {
+                let gossipsub = &swarm.behaviour().core.gossipsub;
+                pick_bootstrap_to_dial(
+                    bootstrap_addresses,
+                    connect_bootstrap_num,
+                    |addr| gossipsub.is_connected_to_addr(addr),
+                    &mut recently_dialed_peers,
+                    &mut rng,
+                )
+            };
+            for addr in chosen {
+                if let Err(e) = libp2p::Swarm::dial(swarm, addr.clone()) {
                     error!("Bootstrap addr {} dial error {}", addr, e);
                 }
             }
@@ -1302,10 +1325,53 @@ mod tests {
         {
             let mut guard = RECENTLY_DIALED_PEERS.lock().unwrap();
             assert!(check_and_mark_dialed(&mut guard, &addr));
-            assert!(!check_and_mark_dialed(&mut guard, &addr), "second dial within DIAL_RETRY_DELAY must be suppressed");
+            assert!(
+                !check_and_mark_dialed(&mut guard, &addr),
+                "second dial within DIAL_RETRY_DELAY must be suppressed"
+            );
         }
         reset_recently_dialed_peers();
         let mut guard = RECENTLY_DIALED_PEERS.lock().unwrap();
-        assert!(check_and_mark_dialed(&mut guard, &addr), "a fresh P2P start must be allowed to dial again");
+        assert!(
+            check_and_mark_dialed(&mut guard, &addr),
+            "a fresh P2P start must be allowed to dial again"
+        );
+    }
+
+    #[test]
+    fn dgb_pick_bootstrap_marks_only_chosen() {
+        let a: Multiaddr = "/ip4/192.0.2.81/tcp/1".parse().unwrap();
+        let b: Multiaddr = "/ip4/192.0.2.82/tcp/1".parse().unwrap();
+        let c: Multiaddr = "/ip4/192.0.2.83/tcp/1".parse().unwrap();
+        let candidates = vec![a.clone(), b.clone(), c.clone()];
+        let mut rng = rand::thread_rng();
+
+        let mut guard = RECENTLY_DIALED_PEERS.lock().unwrap();
+        let chosen = pick_bootstrap_to_dial(&candidates, 1, |_| false, &mut guard, &mut rng);
+        assert_eq!(chosen.len(), 1);
+        // The two addresses that were not chosen must still be dialable.
+        let not_chosen: Vec<_> = candidates.iter().filter(|x| !chosen.contains(x)).cloned().collect();
+        for addr in &not_chosen {
+            assert!(
+                guard.get(addr).is_none(),
+                "unchosen {addr} must not be marked as dialed"
+            );
+        }
+        // The chosen address is marked.
+        assert!(guard.get(&chosen[0]).is_some());
+    }
+
+    #[test]
+    fn dgb_pick_bootstrap_skips_connected_and_recent() {
+        let a: Multiaddr = "/ip4/192.0.2.91/tcp/1".parse().unwrap();
+        let b: Multiaddr = "/ip4/192.0.2.92/tcp/1".parse().unwrap();
+        let mut rng = rand::thread_rng();
+        let mut guard = RECENTLY_DIALED_PEERS.lock().unwrap();
+        assert!(check_and_mark_dialed(&mut guard, &b)); // b dialed recently
+        let chosen = pick_bootstrap_to_dial(&[a.clone(), b.clone()], 2, |x| x == &a, &mut guard, &mut rng);
+        assert!(
+            chosen.is_empty(),
+            "a is connected and b was dialed recently: nothing to dial"
+        );
     }
 }
