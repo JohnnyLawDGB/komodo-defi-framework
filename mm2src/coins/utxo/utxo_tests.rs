@@ -33,7 +33,7 @@ use crate::utxo::utxo_tx_history_v2::{UtxoTxDetailsParams, UtxoTxHistoryOps};
 use crate::{
     BlockHeightAndTime, CoinBalance, CoinBalanceMap, ConfirmPaymentInput, DexFee, IguanaPrivKey, PrivKeyBuildPolicy,
     SearchForSwapTxSpendInput, SpendPaymentArgs, StakingInfosDetails, SwapOps, TradePreimageValue, TxFeeDetails,
-    TxMarshalingErr, ValidateFeeArgs, INVALID_SENDER_ERR_LOG,
+    TxMarshalingErr, ValidateFeeArgs, INVALID_RECEIVER_ERR_LOG, INVALID_SENDER_ERR_LOG,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use crate::{WaitForHTLCTxSpendArgs, WithdrawFee};
@@ -2888,6 +2888,56 @@ fn test_validate_fee_wrong_sender() {
     match error {
         ValidatePaymentError::WrongPaymentTx(err) => assert!(err.contains(INVALID_SENDER_ERR_LOG)),
         _ => panic!("Expected `WrongPaymentTx` wrong sender address, found {:?}", error),
+    }
+}
+
+// DigiByte fork: a fee paid to any address other than the fork's fee key must be rejected by the maker.
+#[test]
+fn dgb_validate_fee_rejects_wrong_receiver() {
+    let rpc_client = electrum_client_for_test(MARTY_ELECTRUM_ADDRS, ChainVariant::MORTY);
+    let coin = utxo_coin_for_test(UtxoRpcClientEnum::Electrum(rpc_client), None, false);
+    // Same fixture as test_validate_old_fee_tx: pays 0.0001 to the upstream legacy fee address.
+    let tx_bytes = hex::decode("0400008085202f8901033aedb3c3c02fc76c15b393c7b1f638cfa6b4a1d502e00d57ad5b5305f12221000000006a473044022074879aabf38ef943eba7e4ce54c444d2d6aa93ac3e60ea1d7d288d7f17231c5002205e1671a62d8c031ac15e0e8456357e54865b7acbf49c7ebcba78058fd886b4bd012103242d9cb2168968d785f6914c494c303ff1c27ba0ad882dbc3c15cfa773ea953cffffffff0210270000000000001976a914ca1e04745e8ca0c60d8c5881531d51bec470743f88ac4802d913000000001976a914902053231ef0541a7628c11acac40d30f2a127bd88ac008e3765000000000000000000000000000000").unwrap();
+    let taker_fee_tx = coin.tx_enum_from_bytes(&tx_bytes).unwrap();
+    let amount: MmNumber = "0.0001".parse::<BigDecimal>().unwrap().into();
+    // No dex_pubkey mock: the maker validates against the DigiByte fork's own fee key.
+    let validate_fee_args = ValidateFeeArgs {
+        fee_tx: &taker_fee_tx,
+        expected_sender: &hex::decode("03242d9cb2168968d785f6914c494c303ff1c27ba0ad882dbc3c15cfa773ea953c").unwrap(),
+        dex_fee: &DexFee::Standard(amount),
+        min_block_number: 0,
+        uuid: &[],
+    };
+    let error = block_on(coin.validate_fee(validate_fee_args)).unwrap_err().into_inner();
+    match error {
+        ValidatePaymentError::WrongPaymentTx(err) => assert!(err.contains(INVALID_RECEIVER_ERR_LOG), "{}", err),
+        other => panic!("Expected WrongPaymentTx with invalid receiver, found {:?}", other),
+    }
+}
+
+// DigiByte fork: a fee to the right address but below the expected amount must be rejected.
+#[test]
+fn dgb_validate_fee_rejects_underpaid() {
+    let rpc_client = electrum_client_for_test(MARTY_ELECTRUM_ADDRS, ChainVariant::MORTY);
+    let coin = utxo_coin_for_test(UtxoRpcClientEnum::Electrum(rpc_client), None, false);
+    let tx_bytes = hex::decode("0400008085202f8901033aedb3c3c02fc76c15b393c7b1f638cfa6b4a1d502e00d57ad5b5305f12221000000006a473044022074879aabf38ef943eba7e4ce54c444d2d6aa93ac3e60ea1d7d288d7f17231c5002205e1671a62d8c031ac15e0e8456357e54865b7acbf49c7ebcba78058fd886b4bd012103242d9cb2168968d785f6914c494c303ff1c27ba0ad882dbc3c15cfa773ea953cffffffff0210270000000000001976a914ca1e04745e8ca0c60d8c5881531d51bec470743f88ac4802d913000000001976a914902053231ef0541a7628c11acac40d30f2a127bd88ac008e3765000000000000000000000000000000").unwrap();
+    let taker_fee_tx = coin.tx_enum_from_bytes(&tx_bytes).unwrap();
+    // The receiver matches (mocked to the fixture's address) but we expect twice what was paid.
+    <UtxoStandardCoin as SwapOps>::dex_pubkey
+        .mock_safe(|_| MockResult::Return(DEX_FEE_ADDR_RAW_PUBKEY_LEGACY.as_slice()));
+    let expected: MmNumber = "0.0002".parse::<BigDecimal>().unwrap().into();
+    let validate_fee_args = ValidateFeeArgs {
+        fee_tx: &taker_fee_tx,
+        expected_sender: &hex::decode("03242d9cb2168968d785f6914c494c303ff1c27ba0ad882dbc3c15cfa773ea953c").unwrap(),
+        dex_fee: &DexFee::Standard(expected),
+        min_block_number: 0,
+        uuid: &[],
+    };
+    let result = block_on(coin.validate_fee(validate_fee_args));
+    <UtxoStandardCoin as SwapOps>::dex_pubkey.clear_mock();
+    match result.unwrap_err().into_inner() {
+        ValidatePaymentError::WrongPaymentTx(err) => assert!(err.contains("less than expected"), "{}", err),
+        other => panic!("Expected WrongPaymentTx underpaid, found {:?}", other),
     }
 }
 
