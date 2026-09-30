@@ -220,7 +220,7 @@ pub const APPLICATION_GRPC_WEB_TEXT_PROTO: &str = "application/grpc-web-text+pro
 pub const SATOSHIS: u64 = 100_000_000;
 
 /// Dex fee public key for chains where SECP256K1 is supported
-/// DigiByte DEX fee key (owner-controlled; private key held offline).
+/// DigiByte DEX fee key (owner-controlled). M0: key in a dedicated node wallet; rotate to an offline key before launch.
 pub const DEX_FEE_ADDR_PUBKEY: &str = "036f27a4e83ddf1239d545887d7dadd5aad8ab0a45518ff2c9fd2721e2d40da52a";
 /// Public key to collect the burn part of dex fee, for chains where SECP256K1 is supported
 /// Burn currently disabled - using same address as fee address in case there is a bug that enables burn (can be re-enabled later)
